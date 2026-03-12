@@ -6,8 +6,7 @@ export const config = {
   },
 };
 
-// ── 設定 ──────────────────────────────────────────────
-const DAILY_LIMIT  = 3;
+const DAILY_LIMIT   = 3;
 const AIRTABLE_BASE = 'appwr5pb1cU6KrmCo';
 const USAGE_TABLE   = 'Usage Tracking';
 
@@ -16,14 +15,23 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   if (req.method === 'OPTIONS') return res.status(200).end();
+
+  // ── 診斷 GET（部署後用瀏覽器開 /api/proxy 確認）──
+  if (req.method === 'GET') {
+    const key = process.env.ANTHROPIC_API_KEY_REPRADAR;
+    return res.status(200).json({
+      key_set: !!key,
+      key_prefix: key ? key.substring(0, 18) + '...' : 'NOT SET',
+      airtable_set: !!process.env.AIRTABLE_TOKEN,
+    });
+  }
+
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  // ── IP 識別 ───────────────────────────────────────────
   const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim()
            || req.socket?.remoteAddress
            || 'unknown';
   const identifier = `repradar:${ip}`;
-
   const today = new Date().toISOString().slice(0, 10);
   const atBase = `https://api.airtable.com/v0/${AIRTABLE_BASE}`;
   const atHeaders = {
@@ -31,7 +39,6 @@ export default async function handler(req, res) {
     'Content-Type': 'application/json',
   };
 
-  // ── 查今日使用次數 ────────────────────────────────────
   const filter = encodeURIComponent(`AND({email}="${identifier}",{date}="${today}")`);
   const searchRes = await fetch(
     `${atBase}/${encodeURIComponent(USAGE_TABLE)}?filterByFormula=${filter}`,
@@ -49,7 +56,6 @@ export default async function handler(req, res) {
     });
   }
 
-  // ── 呼叫 Anthropic API ────────────────────────────────
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -61,7 +67,6 @@ export default async function handler(req, res) {
   });
   const data = await response.json();
 
-  // ── 成功後更新使用次數 ────────────────────────────────
   if (!data.error) {
     if (existing) {
       await fetch(`${atBase}/${encodeURIComponent(USAGE_TABLE)}/${existing.id}`, {
