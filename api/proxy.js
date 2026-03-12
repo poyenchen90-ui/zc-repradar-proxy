@@ -55,7 +55,17 @@ export default async function handler(req, res) {
       }
     });
   }
-
+// ── Airtable 讀取（VSME 條文）──
+if (req.body._action === 'airtable') {
+  const { base, table, offset } = req.body;
+  let url = `https://api.airtable.com/v0/${base}/${encodeURIComponent(table)}?pageSize=100`;
+  if (offset) url += `&offset=${encodeURIComponent(offset)}`;
+  const atRes = await fetch(url, {
+    headers: { Authorization: `Bearer ${process.env.AIRTABLE_TOKEN}` },
+  });
+  const atData = await atRes.json();
+  return res.status(atRes.status).json(atData);
+}
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
